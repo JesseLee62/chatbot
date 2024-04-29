@@ -8,13 +8,18 @@ from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 import os
 import json
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.preprocessing.text import Tokenizer
 vectorizer = TfidfVectorizer()  # Initialize TfidfVectorizer
+# Load the sentiment model
+model = load_model('sentiment.keras')   # classes: ['happy', 'other', 'sadness']
 
 def main():
     # Load the knowledge base created by web_crawler
     with open("knowledge_base.pickle", 'rb') as f:
         term_dict  = pickle.load(f)
-    
+
     print("Welcome to Michael Jordan chatbot!")
     print("Before we start, May I have your name and email address? You can type 'exit' to quit.")
 
@@ -26,20 +31,20 @@ def main():
         'name': name,
         'email': email,
         'likes': [],
-        'dislikes': []
+        'dislikes': [],
+        'neutral': []
     }
 
     # Check if the user is a returning user
     old_user_info = load_user_info(name)
     if old_user_info and len(old_user_info['name']) > 0:    # existing user
-        print(f"Welcome back {old_user_info['name']}! How can I help you today?")
+        print(f"Welcome back {old_user_info['name']}! Glad to see you again!")
         user_info = old_user_info
     else:   # new user
-        print(f'Hi {name}! How can I help you today?')
+        print(f'Hi {name}!')
 
-    # Display available topics to the user  
-    print("Feel free to ask me anything about Michael Jordan, or any topic related to him, including the following terms: ", end="")
-    print(", ".join(term_dict.keys()))  # ("'jordan', 'michael', 'nba', 'game', 'team', 'player', 'basketball','season', 'bull', 'point', 'first', 'chicago', 'career', 'award', 'championship'")
+    # Define keywords associated with Michael Jordan
+    jordan_keywords = ["jordan", "him", "who's", "basketball player", "michael", "mj", "air jordan", "chicago bull"]
 
     # Get all sentences in the knowledge base
     all_sentences = [sentence for sentences in term_dict.values() for sentence in sentences]
@@ -47,41 +52,42 @@ def main():
 
     # Start to interact with the user
     while(1):
-        user_input = input(": ")  # Read user input
+        user_input = input("> ")  # Read user input
         print()
         # If the user inputs "exit", exit the program
         if "exit" in user_input.lower():
             break
+        
+        # If the user talk something about Michael Jordan
+        if any(keyword in user_input.lower() for keyword in jordan_keywords):
+            # Display available topics to the user  
+            print("Bot: Did you mention Jordan? Feel free to ask me anything about Michael Jordan, or any topic related to him, including the following terms: ", end="")
+            print(", ".join(term_dict.keys()))  # ("'jordan', 'michael', 'nba', 'game', 'team', 'player', 'basketball','season', 'bull', 'point', 'first', 'chicago', 'career', 'award', 'championship'")
+            user_input = input("> ")  # Read user input
 
-        # Generate a response based on the user's input
-        response = generate_response(user_input, term_dict)
-        print(response)
+            # Generate a response based on the user's input
+            response = generate_response(user_input, term_dict)
+            print()
 
-        # If there are no known terms in the user's input, ask user to input again
-        if response.startswith("I'm sorry"):
-            print("You can ask me anything about Michael Jordan, or any topic related to him, including the following terms: ", end="")
-            print(", ".join(term_dict.keys()))
-            continue
-        print()
+            # If there are no known terms in the user's input, ask user to input again
+            if response == "":
+                print("Bot: Sorry, I don't have the information you want.")
+                continue
 
-        # Ask the user if they like the response and save their preferences
-        like = input(">>> Do you like this response? (yes/no): ").lower()
-        while 1:       
-            if like == "yes":
-                save_user_preferences(user_info, response, True)
-                break
-            elif like == "no":
-                save_user_preferences(user_info, response, False)
-                break
-            else:
-                print("Invalid input. Please type 'yes' or 'no'.")
-                like = input(": ").lower()
+            print(response)
+            print()
 
-        print(">>> Thanks for your feedback. What else would you like to know about Michael Jordan? If you are done talking, type 'exit' to quit.")
-
+            # Ask the user if they like the response and save their preferences
+            get_feedback_and_save(user_info, response)
+            print(">>> Thanks for your feedback. If you are done talking, type 'exit' to quit.")
+        
+        # Daily Conversation
+        else :
+            print("Bot: conversation")
+        
     # User quit, save the user's information
     save_user_info(user_info)
-    print("Thank you for your questions! Hope to chat with you again soon. Have a great day!")
+    print(">>> Thank you for your questions! Hope to chat with you again soon. Have a great day!")
     
 
 # Generate the response by user's question
@@ -93,10 +99,13 @@ def generate_response(user_input, term_dict):
     # Extract terms contained in the user's input
     user_terms = [term for term in term_dict.keys() if term in cleaned_input]
 
+    if "jordan" in user_input or "him" in user_input or "who" in user_input:
+        user_terms =['jordan','michael']
+
     # If there are no known terms in the user's input, return message to ask them to try again
     if not user_terms:
-        return "I'm sorry, I couldn't find any relevant terms in your input. Please try again with different keywords."
-    
+        return ""
+
     all_sentences = []
     response = []
     # Iterate over each term in the user's input and get the sentences which will be compared later
@@ -197,31 +206,22 @@ def save_user_preferences(user_info, response, like):
     else:
         user_info['dislikes'].append(response)
 
-# Save user's info     
 def save_user_info(user_info):
-    # Get the existing users' info in json file
     users_info = []
     if os.path.exists("users_info.json"):
         with open("users_info.json", 'r', encoding='utf-8') as f:
             users_info = json.load(f)
 
-    # Check if the user already exists in the list
-    existing_user_info = None
-    for user_data in users_info:
-        if user_data['name'] == user_info['name']:
-            existing_user_info = user_data
-            break
+    existing_user_info = next((item for item in users_info if item['name'] == user_info['name']), None)
 
-    # If the user exists, update their information
     if existing_user_info:
         existing_user_info.update(user_info)
-    # If the user doesn't exist, add their information to the list
     else:
         users_info.append(user_info)
 
-    # Write the updated user information back to the JSON file
     with open("users_info.json", 'w', encoding='utf-8') as f:
         json.dump(users_info, f, indent=4)
+
         
 # Load user's info
 def load_user_info(username):
@@ -234,6 +234,45 @@ def load_user_info(username):
                     user_info = user_data
                     return user_info  # If existing user information is found
     return user_info
+
+# Sentiment model
+def analyze_sentiment(text):
+    vocab_size = 25000
+    max_seq_length = 64
+    emotion_mapping = {
+        0: 'happy',
+        1: 'other',
+        2: 'sadness'
+    }
+    # Preprocess the text
+    tokenizer = Tokenizer(num_words=vocab_size)
+    new_text_seq = tokenizer.texts_to_sequences([text])
+    new_text_pad = pad_sequences(new_text_seq, maxlen=max_seq_length, padding='post')
+
+    # Predict sentiment
+    pred = model.predict(new_text_pad)
+
+    # Get the result (Choose the highest probability)
+    predicted_label = np.argmax(pred)
+
+    predicted_emotion = emotion_mapping[predicted_label]
+    return predicted_emotion
+
+def get_feedback_and_save(user_info, response):
+    feedback = input(">>> Can you briefly describe how this response made you feel?: ")
+
+    # Analyze sentiment of the feedback
+    sentiment = analyze_sentiment(feedback)  
+    # print(f"Detected sentiment: {sentiment}")
+
+    # Save feedback based on detected sentiment
+    if sentiment == 'happy':
+        user_info['likes'].append(response)
+    elif sentiment == 'sadness':
+        user_info['dislikes'].append(response)
+    else:
+        user_info['neutral'].append(response)
 ###
+
 if __name__ == "__main__":
     main()
