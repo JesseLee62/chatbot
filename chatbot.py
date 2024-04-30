@@ -1,16 +1,21 @@
 import pickle
 import numpy as np
+import pandas as pd
+import os
+import json
 import string
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split
 from sklearn.metrics.pairwise import cosine_similarity
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
-import os
-import json
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, LSTM, Dense, Dropout, Bidirectional
+
 vectorizer = TfidfVectorizer()  # Initialize TfidfVectorizer
 # Load the sentiment model
 model = load_model('sentiment.keras')   # classes: ['happy', 'other', 'sadness']
@@ -58,7 +63,7 @@ def main():
         if "exit" in user_input.lower():
             break
         
-        # If the user talk something about Michael Jordan
+        # If the user mentioned something about Michael Jordan
         if any(keyword in user_input.lower() for keyword in jordan_keywords):
             # Display available topics to the user  
             print("Bot: Did you mention Jordan? Feel free to ask me anything about Michael Jordan, or any topic related to him, including the following terms: ", end="")
@@ -83,7 +88,9 @@ def main():
         
         # Daily Conversation
         else :
-            print("Bot: conversation")
+            # print("Bot: conversation")
+            predicted_answer = predict_response(user_input)
+            print("Bot:", predicted_answer)
         
     # User quit, save the user's information
     save_user_info(user_info)
@@ -246,16 +253,17 @@ def analyze_sentiment(text):
     }
     # Preprocess the text
     tokenizer = Tokenizer(num_words=vocab_size)
-    new_text_seq = tokenizer.texts_to_sequences([text])
-    new_text_pad = pad_sequences(new_text_seq, maxlen=max_seq_length, padding='post')
+    text_seq = tokenizer.texts_to_sequences([text])
+    text_pad = pad_sequences(text_seq, maxlen=max_seq_length, padding='post')
 
     # Predict sentiment
-    pred = model.predict(new_text_pad)
+    pred = model.predict(text_pad)
 
     # Get the result (Choose the highest probability)
     predicted_label = np.argmax(pred)
 
-    predicted_emotion = emotion_mapping[predicted_label]
+    predicted_emotion = emotion_mapping.get(predicted_label, 'happy')
+    print("Predicted Emotion:", predicted_emotion)
     return predicted_emotion
 
 def get_feedback_and_save(user_info, response):
@@ -272,7 +280,64 @@ def get_feedback_and_save(user_info, response):
         user_info['dislikes'].append(response)
     else:
         user_info['neutral'].append(response)
-###
 
+# Conversation model
+# Load the dataset
+df = pd.read_csv('Conversation.csv')
+
+# Data preprocessing
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(df['question'].values)
+
+# Convert text to sequences
+questions_seq = tokenizer.texts_to_sequences(df['question'].values)
+answers_seq = tokenizer.texts_to_sequences(df['answer'].values)
+
+# Pad sequences to have the same length
+maxlen = max([len(seq) for seq in questions_seq + answers_seq])
+questions_seq_padded = pad_sequences(questions_seq, maxlen=maxlen, padding='post')
+answers_seq_padded = pad_sequences(answers_seq, maxlen=maxlen, padding='post')
+
+# Split the training and testing dataset
+X_train, X_test, y_train, y_test = train_test_split(questions_seq_padded, answers_seq_padded, test_size=0.2, random_state=42)
+
+# Build LSTM model
+model = Sequential()
+model.add(Embedding(input_dim=len(tokenizer.word_index) + 1, output_dim=128))
+model.add(Bidirectional(LSTM(256, return_sequences=True)))  # bidirectional LSTM to improve context understanding
+model.add(Dropout(0.5))                                     # dropout layer to prevent overfitting
+model.add(LSTM(256, return_sequences=True))                 # another LSTM layer
+model.add(Dense(len(tokenizer.word_index) + 1, activation='softmax')) # dense layer
+
+# Compile
+model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+# Train the model using the training data
+model.fit(X_train, y_train,
+          batch_size=32,
+          epochs=300,
+          validation_data=(X_test, y_test),
+          verbose=1,
+          validation_split=0.2)
+
+# Use the model to predict response
+def predict_response(question):
+    # Convert question to sequence
+    question_seq = tokenizer.texts_to_sequences([question])
+    # Pad sequence
+    question_seq_padded = pad_sequences(question_seq, maxlen=maxlen, padding='post')
+    # Make prediction
+    prediction = model.predict(question_seq_padded)
+    # Get predicted answer sequence
+    predicted_answer_seq = np.argmax(prediction, axis=-1)
+    
+    # Convert NumPy array to list
+    predicted_answer_seq_list = predicted_answer_seq.tolist()
+
+    # Convert integer sequence to text
+    predicted_answer = tokenizer.sequences_to_texts(predicted_answer_seq_list)
+    return predicted_answer[0]
+
+###
 if __name__ == "__main__":
     main()
