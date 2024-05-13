@@ -12,7 +12,7 @@ The model was trained by Convolutional Neural Network (CNN) and various Natural 
 The model is based on a sequence-to-sequence (seq2seq) architecture using Long Short-Term Memory (LSTM) network, which is a special kind of Recurrent Neural Network (RNN) suitable for sequence prediction problems and prevent vanishing gradient problem. This architecture is particularly useful for conversation, where the model needs to generate sequences of text in response to input sequences.   
 
 ## Dialog tree or logic:
-![image](https://https://github.com/JesseLee62/img-storage/blob/master/chatbot/dialog.jpg) 
+![image](https://github.com/JesseLee62/img-storage/blob/master/chatbot/dialog.jpg)   
 
 ## Sample dialog interactions:
 ![image](https://github.com/JesseLee62/img-storage/blob/master/chatbot/1.jpg)   
@@ -23,7 +23,7 @@ The model is based on a sequence-to-sequence (seq2seq) architecture using Long S
 ![image](https://github.com/JesseLee62/img-storage/blob/master/chatbot/6.jpg)   
 ![image](https://github.com/JesseLee62/img-storage/blob/master/chatbot/7.jpg)   
 ![image](https://github.com/JesseLee62/img-storage/blob/master/chatbot/8.jpg)   
-![image](https://github.com/JesseLee62/img-storage/blob/master/chatbot/9.jpg)   
+![image](https://github.com/JesseLee62/img-storage/blob/master/chatbot/9-exit.jpg)   
 
 ## References: 
 https://www.kaggle.com/datasets/ishantjuyal/emotions-in-text?resource=download     
